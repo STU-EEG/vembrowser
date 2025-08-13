@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>VEEMBrowser Demo</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <img class="logo" src="./docs/assets/images/logo.png" alt="Logo">
+    <div class="title">VEEMBrowser</div>
+    <nav>
+      <div class="menu">
+        <button class="menu-btn" data-i18n="file" data-menu="file">File ▼</button>
+        <div class="dropdown" id="menu-file">
+          <label class="dropdown-item">
+            <span data-i18n="open">Open…</span>
+            <input type="file" id="fileInput" multiple hidden />
+          </label>
+          <div class="dropdown-item" id="saveProject">
+            <span data-i18n="save">Save</span>
+          </div>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="menu-btn" data-i18n="layout" data-menu="layout">Layout ▼</button>
+        <div class="dropdown" id="menu-layout">
+          <div class="submenu">
+            <div class="submenu-title" data-i18n="signals">Signals</div>
+            <div id="signalsList"></div>
+          </div>
+          <div class="submenu">
+            <div class="submenu-title" data-i18n="annotations">Annotations</div>
+            <div id="annotationsList"></div>
+          </div>
+        </div>
+      </div>
+      <div class="menu">
+        <button class="menu-btn" data-menu="lang">Language ▼</button>
+        <div class="dropdown" id="menu-lang">
+          <div class="dropdown-item">
+            <label><input type="radio" name="lang" value="en" checked /> English</label>
+          </div>
+          <div class="dropdown-item">
+            <label><input type="radio" name="lang" value="ru" /> Русский</label>
+          </div>
+        </div>
+        <button id="playPauseBtn" class="play-pause">▶</button>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <div id="leftGutter"></div>
+    <canvas id="signalCanvas"></canvas>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

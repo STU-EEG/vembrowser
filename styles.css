@@ -1,0 +1,111 @@
+body {
+  margin: 0;
+  font-family: sans-serif;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  background: #2c3e50;
+  color: white;
+  padding: 0 5px;
+}
+
+.logo {
+  margin-right: 8px;
+  margin-top: 5px;
+  margin-bottom: 5px;
+  height: 45px;
+  width: auto;    /* Keeps the aspect ratio */
+  display: inline-block; /* Ensures proper layout */
+  vertical-align: middle; /* aligns with text */
+}
+
+.title {
+  font-size: 1.8em;
+  font-weight: bold;
+  margin-right: 20px;
+  margin-top: 3px;
+  margin-bottom: 3px;
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  flex: 1;
+}
+
+.menu {
+  position: relative;
+}
+
+.menu-btn {
+  background: none;
+  border: none;
+  color: white;
+  padding: 8px;
+  cursor: pointer;
+}
+
+.menu-btn:hover {
+  background: rgba(255,255,255,0.1);
+}
+
+.dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  background: white;
+  color: black;
+  min-width: 150px;
+  border: 1px solid #ccc;
+  z-index: 100;
+}
+
+.dropdown-item {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.dropdown-item:hover {
+  background: #eee;
+}
+
+.submenu {
+  padding: 4px 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+.submenu-title {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.play-pause {
+  background: #27ae60;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  margin-left: auto;
+  cursor: pointer;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  background: #f8f8f8;
+}
+
+#leftGutter {
+  width: 60px;
+  background: #ecf0f1;
+  border-right: 1px solid #ccc;
+}
+
+#signalCanvas {
+  flex: 1;
+  background: white;
+}

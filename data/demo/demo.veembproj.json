@@ -1,0 +1,20 @@
+{
+  "projectName": "Demo EEG Project",
+  "signals": [
+    {
+      "file": "eeg.veembsignal.json",
+      "visible": true
+    }
+  ],
+  "annotations": [
+    {
+      "file": "sleep-stages.veembannot.json",
+      "visible": true
+    },
+    {
+      "file": "artifacts.veembannot.json",
+      "visible": true
+    }
+  ],
+  "currentTime": 0
+}
