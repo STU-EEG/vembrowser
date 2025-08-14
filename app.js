@@ -141,63 +141,75 @@ document.getElementById("playPauseBtn").addEventListener("click", () => {
   if (state.play) requestAnimationFrame(tick);
 });
 
-// ====== EDF parsing ======
+// ====== EDF parsing via edfdecoder ======
 async function parseEDF(file) {
-  const buf = await file.arrayBuffer();
-  const dv = new DataView(buf);
+  // Read the File into an ArrayBuffer
+  const buff = await file.arrayBuffer();
 
-  function readStr(off, len) {
-    return new TextDecoder().decode(new Uint8Array(buf, off, len)).trim();
+  // Decode using edfdecoder (works in browser)
+  const decoder = new edfdecoder.EdfDecoder();
+  decoder.setInput(buff);
+
+  try {
+    decoder.decode();
+  } catch (err) {
+    // edfdecoder does NOT support EDF+; surface a useful error
+    throw new Error(
+      "Failed to decode EDF. " +
+      "Note: edfdecoder supports classic EDF, not EDF+ (" + err.message + ")"
+    );
   }
 
-  const ns = parseInt(readStr(252, 4)); // number of signals
-  const duration = parseFloat(readStr(244, 8)); // seconds per record
-  const nRecords = parseInt(readStr(236, 8));
+  const edf = decoder.getOutput();
 
-  // Per-signal headers start at byte 256
-  let offset = 256;
-  const labels = [];
-  const physMin = [], physMax = [], digMin = [], digMax = [], samplesPerRecord = [];
-  for (let i = 0; i < ns; i++) { labels.push(readStr(offset + i * 16, 16)); }
-  offset += ns * 16;
-  offset += ns * 80; // skip transducer type
-  for (let i = 0; i < ns; i++) physMin.push(parseFloat(readStr(offset + i * 8, 8)));
-  offset += ns * 8;
-  for (let i = 0; i < ns; i++) physMax.push(parseFloat(readStr(offset + i * 8, 8)));
-  offset += ns * 8;
-  for (let i = 0; i < ns; i++) digMin.push(parseInt(readStr(offset + i * 8, 8)));
-  offset += ns * 8;
-  for (let i = 0; i < ns; i++) digMax.push(parseInt(readStr(offset + i * 8, 8)));
-  offset += ns * 8;
-  offset += ns * 80; // skip prefiltering
-  for (let i = 0; i < ns; i++) samplesPerRecord.push(parseInt(readStr(offset + i * 8, 8)));
-  offset += ns * 8;
-  offset += ns * 32; // reserved
+  // Number of signals (channels) and records
+  const ns = edf.getNumberOfSignals();
+  const nRecords = edf.getNumberOfRecords();
 
-  // Read all data records
-  let dataOffset = 256 + ns * (16 + 80 + 8 + 8 + 8 + 8 + 80 + 8 + 32);
-  const signals = labels.map((label, ch) => ({
-    label,
-    samples: new Float32Array(nRecords * samplesPerRecord[ch])
-  }));
+  // Record duration (seconds). Different builds expose one of these names.
+  const recordDuration =
+    (typeof edf.getRecordDuration === "function" && edf.getRecordDuration()) ||
+    (typeof edf.getDurationOfRecords === "function" && edf.getDurationOfRecords()) ||
+    1; // fallback
 
-  const view = new DataView(buf, dataOffset);
-  let ptr = 0;
-  for (let rec = 0; rec < nRecords; rec++) {
-    for (let ch = 0; ch < ns; ch++) {
-      const nSamp = samplesPerRecord[ch];
-      const dmin = digMin[ch], dmax = digMax[ch], pmin = physMin[ch], pmax = physMax[ch];
-      const scale = (pmax - pmin) / (dmax - dmin);
-      const offsetPhys = pmin - dmin * scale;
-
-      for (let s = 0; s < nSamp; s++) {
-        const val = view.getInt16(ptr, true);
-        signals[ch].samples[rec * nSamp + s] = val * scale + offsetPhys;
-        ptr += 2;
-      }
-    }
+  // Collect labels as best as the API allows (some builds have an array getter)
+  let labels = [];
+  if (typeof edf.getSignalLabels === "function") {
+    const arr = edf.getSignalLabels();
+    labels = Array.from({ length: ns }, (_, i) => arr[i] || `Ch ${i + 1}`);
+  } else if (typeof edf.getSignalLabel === "function") {
+    labels = Array.from({ length: ns }, (_, i) => edf.getSignalLabel(i) || `Ch ${i + 1}`);
+  } else {
+    labels = Array.from({ length: ns }, (_, i) => `Ch ${i + 1}`);
   }
-  return { labels, ns, duration, nRecords, signals, samplesPerRecord };
+
+  // Build samplesPerRecord and a concatenated Float32Array per channel
+  const samplesPerRecord = [];
+  const signals = [];
+
+  for (let ch = 0; ch < ns; ch++) {
+    // Determine samples-per-record from the first record
+    const first = edf.getPhysicalSignal(ch, 0);           // Float32Array
+    const nSampPerRec = first.length;
+    samplesPerRecord.push(nSampPerRec);
+
+    // Concatenate all records for this channel
+    const concatenated = edf.getPhysicalSignalConcatRecords(ch, 0, nRecords);
+    const samples = concatenated instanceof Float32Array
+      ? concatenated
+      : new Float32Array(concatenated);
+
+    signals.push({ label: labels[ch], samples });
+  }
+
+  return {
+    labels,
+    ns,
+    duration: recordDuration, // seconds per record
+    nRecords,
+    signals,                  // [{ label, samples: Float32Array }]
+    samplesPerRecord          // per-channel samples per record
+  };
 }
 
 // ====== Drawing ======
@@ -268,9 +280,16 @@ function drawSignals() {
   const startSample = Math.floor(startSec * sps);
   const endSample = Math.min(samples.length, Math.floor(endSec * sps));
 
+  // Compute scaling factor without spreading huge arrays
+  let maxVal = 1;
+  if (samples.length > 0) {
+    maxVal = samples.reduce((m, v) => (v > m ? v : m), -Infinity);
+    if (maxVal === 0) maxVal = 1; // avoid divide-by-zero
+  }
+
   for (let i = startSample; i < endSample; i++) {
     const x = ((i / sps) - startSec) * state.pxPerSec;
-    const y = midY - samples[i] * amp / (Math.max(...samples) || 1);
+    const y = midY - samples[i] * amp / maxVal;
     if (i === startSample) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
   }
