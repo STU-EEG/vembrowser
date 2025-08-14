@@ -6,7 +6,8 @@ const i18n = {
     signals: "Signals",
     annotations: "Annotations",
     file: "File ▼",
-    layout: "Layout ▼"
+    layout: "Layout ▼",
+    clickToLoad: "Click to load"
   },
   ru: {
     open: "Открыть…",
@@ -14,7 +15,8 @@ const i18n = {
     signals: "Сигналы",
     annotations: "Аннотации",
     file: "Файл ▼",
-    layout: "Вид ▼"
+    layout: "Вид ▼",
+    clickToLoad: "Нажмите, чтобы загрузить"
   }
 };
 
@@ -26,7 +28,10 @@ let state = {
   edf: null,
   signalData: [],
   pxPerSec: 38, // ~1 cm at 96dpi
-  currentTimeSec: 0
+  currentTimeSec: 0,
+  lastTs: null,
+  labelColors: {}, // { annotationIndex: { label: color } }
+  awaitingEdfFile: null
 };
 
 // ====== UI Helpers ======
@@ -60,6 +65,7 @@ document.querySelectorAll('input[name="lang"]').forEach(radio => {
   radio.addEventListener("change", e => {
     state.lang = e.target.value;
     applyTranslations();
+    drawSignals();
   });
 });
 
@@ -75,22 +81,28 @@ document.getElementById("fileInput").addEventListener("change", async e => {
   const projText = await projFile.text();
   state.project = JSON.parse(projText);
 
+  // Generate colors per annotation label
+  state.labelColors = {};
+  (state.project.annotations || []).forEach((ann, idx) => {
+    const uniqueLabels = [...new Set(ann.events.map(ev => ev.label))];
+    const colorMap = {};
+    uniqueLabels.forEach((label, i) => {
+      colorMap[label] = randomColor(i);
+    });
+    state.labelColors[idx] = colorMap;
+  });
+
   populateLayoutMenus();
-
-  // Load first signal's EDF
-  if (state.project.signals && state.project.signals.length > 0) {
-    const sigSpecFile = state.files[state.project.signals[0].file];
-    if (!sigSpecFile) return alert("Missing signal spec JSON file.");
-    const sigSpec = JSON.parse(await sigSpecFile.text());
-
-    const edfFile = state.files[sigSpec.edfFile];
-    if (!edfFile) return alert("Missing EDF file: " + sigSpec.edfFile);
-
-    state.edf = await parseEDF(edfFile);
-    state.signalData = state.edf.signals[0].samples; // take first channel
-    drawSignals();
-  }
+  state.signalData = [];
+  state.awaitingEdfFile = state.project.signals?.[0]?.edfFile || null;
+  drawSignals();
 });
+
+// ====== Random color generator ======
+function randomColor(seed) {
+  const hue = (seed * 137.508) % 360; // golden angle approximation
+  return `hsl(${hue}, 70%, 50%)`;
+}
 
 // ====== Populate layout menu ======
 function populateLayoutMenus() {
@@ -101,12 +113,12 @@ function populateLayoutMenus() {
 
   (state.project.signals || []).forEach(sig => {
     const label = document.createElement("label");
-    label.innerHTML = `<input type="checkbox" ${sig.visible ? "checked" : ""}> ${sig.file}`;
+    label.innerHTML = `<input type="checkbox" ${sig.visible ? "checked" : ""}> ${sig.signalName}`;
     signalsList.appendChild(label);
   });
   (state.project.annotations || []).forEach(ann => {
     const label = document.createElement("label");
-    label.innerHTML = `<input type="checkbox" ${ann.visible ? "checked" : ""}> ${ann.file}`;
+    label.innerHTML = `<input type="checkbox" ${ann.visible ? "checked" : ""}> ${ann.name}`;
     annotationsList.appendChild(label);
   });
 }
@@ -114,11 +126,11 @@ function populateLayoutMenus() {
 // ====== Save project ======
 document.getElementById("saveProject").addEventListener("click", () => {
   if (!state.project) return;
-  state.project.currentTimeSec = state.currentTimeSec;
+  state.project.currentTime = state.currentTimeSec;
   const blob = new Blob([JSON.stringify(state.project, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = state.project.name + ".veembproj.json";
+  a.download = state.project.projectName + ".veembproj.json";
   a.click();
 });
 
@@ -199,7 +211,28 @@ function drawSignals() {
 
   if (!state.signalData.length) {
     ctx.fillStyle = "#ccc";
-    ctx.fillText("No signal loaded", 20, 30);
+    if (state.awaitingEdfFile) {
+      ctx.fillText(`${t("clickToLoad")} ${state.awaitingEdfFile}`, 20, 30);
+      canvas.onclick = () => {
+        const inp = document.createElement("input");
+        inp.type = "file";
+        inp.accept = ".edf";
+        inp.onchange = async ev => {
+          const edfFile = ev.target.files[0];
+          if (!edfFile || edfFile.name !== state.awaitingEdfFile) {
+            alert(`Please select ${state.awaitingEdfFile}`);
+            return;
+          }
+          state.edf = await parseEDF(edfFile);
+          state.signalData = state.edf.signals[0].samples;
+          state.awaitingEdfFile = null;
+          drawSignals();
+        };
+        inp.click();
+      };
+    } else {
+      ctx.fillText("No signal loaded", 20, 30);
+    }
     return;
   }
 
@@ -227,7 +260,7 @@ function drawSignals() {
     ctx.fillText(sec + "s", x + 2, canvas.height - 5);
   }
 
-  // Draw signal waveform (centered vertically)
+  // Draw signal waveform
   ctx.strokeStyle = "#0066cc";
   ctx.beginPath();
   const midY = canvas.height / 2;

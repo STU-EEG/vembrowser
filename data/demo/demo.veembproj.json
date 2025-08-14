@@ -1,20 +1,65 @@
 {
   "projectName": "Demo EEG Project",
+  "currentTime": 0,
   "signals": [
     {
-      "file": "eeg.veembsignal.json",
+      "signalName": "EEG",
+      "startTime": "2025-01-01T00:00:00",
+      "endTime": "2025-01-01T01:00:00",
+      "edfFile": "aaaaaaar_00000001.edf",
+      "channels": [
+        "EEG FP1-REF",
+        "EEG FP2-REF",
+        "EEG F3-REF",
+        "EEG F4-REF",
+        "EEG C3-REF",
+        "EEG C4-REF",
+        "EEG P3-REF",
+        "EEG P4-REF",
+        "EEG O1-REF",
+        "EEG O2-REF",
+        "EEG F7-REF",
+        "EEG F8-REF",
+        "EEG T3-REF",
+        "EEG T4-REF",
+        "EEG T5-REF",
+        "EEG T6-REF",
+        "EEG A1-REF",
+        "EEG A2-REF",
+        "EEG FZ-REF",
+        "EEG CZ-REF",
+        "EEG PZ-REF",
+        "EEG EKG1-REF",
+        "EEG EKG2-REF",
+        "EEG EMG-REF",
+        "EEG EOG-L-REF",
+        "EEG EOG-R-REF",
+        "EEG SP1-REF"
+      ],
       "visible": true
     }
   ],
   "annotations": [
     {
-      "file": "sleep-stages.veembannot.json",
+      "name": "Sleep Stages",
+      "opacity": 0.2,
+      "events": [
+        { "startSec": 0,   "endSec": 60,  "label": "W"  },
+        { "startSec": 60,  "endSec": 210, "label": "N1" },
+        { "startSec": 210, "endSec": 420, "label": "N2" },
+        { "startSec": 420, "endSec": 600, "label": "N3" }
+      ],
       "visible": true
     },
     {
-      "file": "artifacts.veembannot.json",
+      "name": "Artifacts",
+      "opacity": 0.18,
+      "events": [
+        { "startSec": 95,  "endSec": 99,  "label": "EMG" },
+        { "startSec": 278, "endSec": 281, "label": "EOG" },
+        { "startSec": 512, "endSec": 517, "label": "Movement" }
+      ],
       "visible": true
     }
-  ],
-  "currentTime": 0
+  ]
 }
