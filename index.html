@@ -15,7 +15,7 @@
         <div class="dropdown" id="menu-file">
           <label class="dropdown-item">
             <span data-i18n="open">Open…</span>
-            <input type="file" id="fileInput" multiple hidden />
+            <input type="file" accept=".json" id="fileInput" multiple hidden />
           </label>
           <div class="dropdown-item" id="saveProject">
             <span data-i18n="save">Save</span>
@@ -54,7 +54,7 @@
     <div id="leftGutter"></div>
     <canvas id="signalCanvas"></canvas>
   </main>
-  <script src="https://cdn.jsdelivr.net/npm/edfdecoder/dist/edfdecoder.umd.min.js"></script>
+  <script src="lib/edfdecoder.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

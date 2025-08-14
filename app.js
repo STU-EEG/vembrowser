@@ -165,7 +165,7 @@ async function parseEDF(file) {
   // Number of signals (channels) and records
   const ns = edf.getNumberOfSignals();
   const nRecords = edf.getNumberOfRecords();
-
+  
   // Record duration (seconds). Different builds expose one of these names.
   const recordDuration =
     (typeof edf.getRecordDuration === "function" && edf.getRecordDuration()) ||
@@ -188,18 +188,21 @@ async function parseEDF(file) {
   const signals = [];
 
   for (let ch = 0; ch < ns; ch++) {
-    // Determine samples-per-record from the first record
-    const first = edf.getPhysicalSignal(ch, 0);           // Float32Array
-    const nSampPerRec = first.length;
+    const nSampPerRec = edf.getPhysicalSignal(ch, 0).length;
     samplesPerRecord.push(nSampPerRec);
 
-    // Concatenate all records for this channel
-    const concatenated = edf.getPhysicalSignalConcatRecords(ch, 0, nRecords);
-    const samples = concatenated instanceof Float32Array
-      ? concatenated
-      : new Float32Array(concatenated);
+    const samples = edf.getPhysicalSignalConcatRecords(ch, 0, nRecords);
+    const floatSamples = new Float32Array(samples);
 
-    signals.push({ label: labels[ch], samples });
+    // Precompute max absolute value for scaling
+    let maxVal = 0;
+    for (let v of floatSamples) {
+      const absV = Math.abs(v);
+      if (absV > maxVal) maxVal = absV;
+    }
+    if (maxVal === 0) maxVal = 1;
+
+    signals.push({ label: labels[ch], samples: floatSamples, maxVal });
   }
 
   return {
@@ -216,11 +219,15 @@ async function parseEDF(file) {
 function drawSignals() {
   const canvas = document.getElementById("signalCanvas");
   const ctx = canvas.getContext("2d");
+  const gutter = document.getElementById("leftGutter");
+  gutter.innerHTML = ""; // clear channel names
+
   canvas.width = canvas.clientWidth;
   canvas.height = canvas.clientHeight;
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+  // === Lazy EDF load case ===
   if (!state.signalData.length) {
     ctx.fillStyle = "#ccc";
     if (state.awaitingEdfFile) {
@@ -236,8 +243,9 @@ function drawSignals() {
             return;
           }
           state.edf = await parseEDF(edfFile);
-          state.signalData = state.edf.signals[0].samples;
+          state.signalData = state.edf.signals; // all channels
           state.awaitingEdfFile = null;
+          canvas.onclick = null; // remove click handler once loaded
           drawSignals();
         };
         inp.click();
@@ -248,12 +256,33 @@ function drawSignals() {
     return;
   }
 
-  const samples = state.signalData;
-  const totalDuration = samples.length / state.edf.samplesPerRecord[0] * state.edf.duration;
+  canvas.onclick = null; // remove EDF-load click handler if data is loaded
+
+  const totalChannels = state.signalData.length;
+  const chHeight = canvas.height / totalChannels;
   const visibleDuration = canvas.width / state.pxPerSec;
   const startSec = state.currentTimeSec;
   const endSec = startSec + visibleDuration;
   const sps = state.edf.samplesPerRecord[0] / state.edf.duration;
+
+  // === Draw annotations (background) ===
+  (state.project.annotations || []).forEach((ann, idx) => {
+    if (!ann.visible) return;
+    ctx.globalAlpha = ann.opacity ?? 0.2;
+
+    ann.events.forEach(ev => {
+      // Skip if event is completely outside visible range
+      if (ev.endSec < startSec || ev.startSec > endSec) return;
+
+      const x1 = (ev.startSec - startSec) * state.pxPerSec;
+      const x2 = (ev.endSec - startSec) * state.pxPerSec;
+
+      ctx.fillStyle = state.labelColors?.[idx]?.[ev.label] || "#ff0000";
+      ctx.fillRect(x1, 0, x2 - x1, canvas.height);
+    });
+
+    ctx.globalAlpha = 1.0;
+  });
 
   // Draw vertical grid lines
   ctx.strokeStyle = "#ddd";
@@ -272,29 +301,50 @@ function drawSignals() {
     ctx.fillText(sec + "s", x + 2, canvas.height - 5);
   }
 
-  // Draw signal waveform
-  ctx.strokeStyle = "#0066cc";
-  ctx.beginPath();
-  const midY = canvas.height / 2;
-  const amp = canvas.height / 4;
-  const startSample = Math.floor(startSec * sps);
-  const endSample = Math.min(samples.length, Math.floor(endSec * sps));
+  // Draw each channel waveform + label
+  state.signalData.forEach((sig, ch) => {
+    const midY = chHeight * (ch + 0.5);
+    const amp = chHeight * 0.4;
+    const startSample = Math.floor(startSec * sps);
+    const endSample = Math.min(sig.samples.length, Math.floor(endSec * sps));
 
-  // Compute scaling factor without spreading huge arrays
-  let maxVal = 1;
-  if (samples.length > 0) {
-    maxVal = samples.reduce((m, v) => (v > m ? v : m), -Infinity);
-    if (maxVal === 0) maxVal = 1; // avoid divide-by-zero
-  }
+    ctx.strokeStyle = "#0066cc";
+    ctx.beginPath();
+    for (let i = startSample; i < endSample; i++) {
+      const x = ((i / sps) - startSec) * state.pxPerSec;
+      const y = midY - sig.samples[i] * amp / sig.maxVal;
+      if (i === startSample) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
 
-  for (let i = startSample; i < endSample; i++) {
-    const x = ((i / sps) - startSec) * state.pxPerSec;
-    const y = midY - samples[i] * amp / maxVal;
-    if (i === startSample) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.stroke();
+    // Channel name in left gutter
+    const chLabel = document.createElement("div");
+    chLabel.style.height = chHeight + "px";
+    chLabel.style.display = "flex";
+    chLabel.style.alignItems = "center";
+    chLabel.style.justifyContent = "flex-end";
+    chLabel.style.paddingRight = "5px";
+    chLabel.style.fontSize = "12px";
+    chLabel.textContent = sig.label;
+    gutter.appendChild(chLabel);
+  });
+
+  // // Signal name vertically centered in gutter
+  // if (state.project?.signals?.[0]?.signalName) {
+  //   const sigNameDiv = document.createElement("div");
+  //   sigNameDiv.style.position = "absolute";
+  //   sigNameDiv.style.top = "50%";
+  //   sigNameDiv.style.left = "0";
+  //   sigNameDiv.style.transform = "translateY(-50%) rotate(-90deg)";
+  //   sigNameDiv.style.transformOrigin = "center";
+  //   sigNameDiv.style.whiteSpace = "nowrap";
+  //   sigNameDiv.style.fontWeight = "bold";
+  //   sigNameDiv.textContent = state.project.signals[0].signalName;
+  //   gutter.appendChild(sigNameDiv);
+  // }
 }
+
 
 // ====== Play loop ======
 function tick(ts) {
