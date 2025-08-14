@@ -75,7 +75,7 @@ document.getElementById("fileInput").addEventListener("change", async e => {
   state.files = {};
   for (let f of files) state.files[f.name] = f;
 
-  const projFile = [...files].find(f => f.name.endsWith(".veembproj.json"));
+  const projFile = [...files].find(f => f.name.endsWith(".vembproj.json"));
   if (!projFile) return alert("No project file found.");
 
   const projText = await projFile.text();
@@ -130,7 +130,7 @@ document.getElementById("saveProject").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(state.project, null, 2)], { type: "application/json" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = state.project.projectName + ".veembproj.json";
+  a.download = state.project.projectName + ".vembproj.json";
   a.click();
 });
 
