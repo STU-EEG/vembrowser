@@ -112,7 +112,7 @@ main {
 }
 
 #leftGutter {
-  width: 60px;
+  width: 100px;
   background: #ecf0f1;
   border-right: 1px solid #ccc;
   min-height: 0;
@@ -138,6 +138,7 @@ main {
   max-height: 120px;
   overflow-y: auto;
 }
+
 .annotation-strip {
   height: 18px;
   position: relative;
@@ -145,6 +146,7 @@ main {
   display: flex;
   align-items: center;
 }
+
 .annotation-strip-label {
   width: 60px;
   font-size: 11px;
@@ -173,14 +175,20 @@ main {
   white-space: nowrap;
   pointer-events: none;
 }
+
 #timelineBar {
   background: #f4f4f4;
   border-top: 1px solid #ccc;
   min-height: 32px;
   min-height: 32px;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 6px 0 0 66px; /* 60px label + 6px padding-right from .annotation-strip-label */
+  box-sizing: border-box;
 }
+
 #timelineSlider {
   width: 100%;
-  margin: 0 10px;
+  margin: 0;
 }
