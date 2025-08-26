@@ -31,6 +31,7 @@ let state = {
   currentTimeSec: 0,
   lastTs: null,
   labelColors: {}, // { annotationIndex: { label: color } }
+  yScale: 1,
   awaitingEdfFile: null
 };
 
@@ -69,6 +70,24 @@ document.querySelectorAll('input[name="lang"]').forEach(radio => {
   });
 });
 
+// ====== Y scale tuning ======
+document.getElementById("yScaleBox").addEventListener("change", e => {
+  let v = parseFloat(e.target.value);
+  if (isNaN(v) || v <= 0) v = 1;
+  state.yScale = v;
+  drawSignals();
+});
+document.getElementById("yScaleMinus").addEventListener("click", () => {
+  state.yScale = Math.max(0.1, state.yScale - 0.1);
+  document.getElementById("yScaleBox").value = state.yScale.toFixed(2);
+  drawSignals();
+});
+document.getElementById("yScalePlus").addEventListener("click", () => {
+  state.yScale = Math.min(10, state.yScale + 0.1);
+  document.getElementById("yScaleBox").value = state.yScale.toFixed(2);
+  drawSignals();
+});
+
 // ====== Open project ======
 document.getElementById("fileInput").addEventListener("change", async e => {
   const files = e.target.files;
@@ -96,6 +115,14 @@ document.getElementById("fileInput").addEventListener("change", async e => {
   state.signalData = [];
   state.awaitingEdfFile = state.project.signals?.[0]?.edfFile || null;
   drawSignals();
+
+  const timelineSlider = document.getElementById("timelineSlider");
+  timelineSlider.addEventListener("input", e => {
+    if (!state.edf) return;
+    const duration = state.edf.nRecords * state.edf.duration;
+    state.currentTimeSec = parseFloat(e.target.value) * duration;
+    drawSignals();
+  });
 });
 
 // ====== Random color generator ======
@@ -215,6 +242,60 @@ async function parseEDF(file) {
   };
 }
 
+function drawAnnotationStrips() {
+  const strips = document.getElementById("annotationStrips");
+  strips.innerHTML = "";
+  if (!state.project?.annotations || !state.edf) return;
+
+  const duration = state.edf.nRecords * state.edf.duration;
+  state.project.annotations.forEach((ann, idx) => {
+    if (!ann.visible) return;
+    const strip = document.createElement("div");
+    strip.className = "annotation-strip";
+
+    // Label
+    const label = document.createElement("div");
+    label.className = "annotation-strip-label";
+    label.textContent = ann.name || `Track ${idx+1}`;
+    strip.appendChild(label);
+
+    // Track
+    const track = document.createElement("div");
+    track.className = "annotation-strip-track";
+
+    ann.events.forEach(ev => {
+      // Clamp to visible duration
+      const left = Math.max(0, (ev.startSec / duration) * 100);
+      const right = Math.min(100, (ev.endSec / duration) * 100);
+      if (right <= 0 || left >= 100) return;
+
+      const evDiv = document.createElement("div");
+      evDiv.className = "annotation-strip-event";
+      evDiv.style.left = left + "%";
+      evDiv.style.width = (right - left) + "%";
+      evDiv.style.background = state.labelColors?.[idx]?.[ev.label] || "#ff0000";
+      evDiv.title = ev.label;
+      evDiv.textContent = ev.label;
+      track.appendChild(evDiv);
+    });
+
+    strip.appendChild(track);
+    strips.appendChild(strip);
+  });
+}
+
+// Update slider position after drawing
+function updateTimelineSlider() {
+  if (!state.edf) {
+    timelineSlider.value = 0;
+    timelineSlider.disabled = true;
+    return;
+  }
+  timelineSlider.disabled = false;
+  const duration = state.edf.nRecords * state.edf.duration;
+  timelineSlider.value = Math.max(0, Math.min(1, state.currentTimeSec / duration));
+}
+
 // ====== Drawing ======
 function drawSignals() {
   const canvas = document.getElementById("signalCanvas");
@@ -304,7 +385,7 @@ function drawSignals() {
   // Draw each channel waveform + label
   state.signalData.forEach((sig, ch) => {
     const midY = chHeight * (ch + 0.5);
-    const amp = chHeight * 0.4;
+    const amp = chHeight * 0.4 * state.yScale;
     const startSample = Math.floor(startSec * sps);
     const endSample = Math.min(sig.samples.length, Math.floor(endSec * sps));
 
@@ -343,6 +424,8 @@ function drawSignals() {
   //   sigNameDiv.textContent = state.project.signals[0].signalName;
   //   gutter.appendChild(sigNameDiv);
   // }
+  drawAnnotationStrips();
+  updateTimelineSlider();
 }
 
 
@@ -356,6 +439,7 @@ function tick(ts) {
   drawSignals();
 
   if (state.play) requestAnimationFrame(tick);
+  updateTimelineSlider();
 }
 
 // ====== Init ======
