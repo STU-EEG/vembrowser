@@ -32,7 +32,8 @@ let state = {
   lastTs: null,
   labelColors: {}, // { annotationIndex: { label: color } }
   yScale: 1,
-  awaitingEdfFile: null
+  awaitingEdfFile: null,
+  loadedVideos: {} // { filename: { url, el, startSec } }
 };
 
 // ====== UI Helpers ======
@@ -115,6 +116,7 @@ document.getElementById("fileInput").addEventListener("change", async e => {
   state.signalData = [];
   state.awaitingEdfFile = state.project.signals?.[0]?.edfFile || null;
   drawSignals();
+  drawVideoPane();
 
   const timelineSlider = document.getElementById("timelineSlider");
   timelineSlider.addEventListener("input", e => {
@@ -138,17 +140,41 @@ function populateLayoutMenus() {
   signalsList.innerHTML = "";
   annotationsList.innerHTML = "";
 
-  (state.project.signals || []).forEach(sig => {
+  // ---- SIGNALS ----
+  (state.project.signals || []).forEach((sig, i) => {
     const label = document.createElement("label");
-    label.innerHTML = `<input type="checkbox" ${sig.visible ? "checked" : ""}> ${sig.signalName}`;
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = sig.visible ?? true;
+
+    checkbox.addEventListener("change", () => {
+      state.project.signals[i].visible = checkbox.checked;
+      drawSignals();
+    });
+
+    label.appendChild(checkbox);
+    label.append(` ${sig.signalName}`);
     signalsList.appendChild(label);
   });
-  (state.project.annotations || []).forEach(ann => {
+
+  // ---- ANNOTATIONS ----
+  (state.project.annotations || []).forEach((ann, i) => {
     const label = document.createElement("label");
-    label.innerHTML = `<input type="checkbox" ${ann.visible ? "checked" : ""}> ${ann.name}`;
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = ann.visible ?? true;
+
+    checkbox.addEventListener("change", () => {
+      state.project.annotations[i].visible = checkbox.checked;
+      drawSignals();
+    });
+
+    label.appendChild(checkbox);
+    label.append(` ${ann.name}`);
     annotationsList.appendChild(label);
   });
 }
+
 
 // ====== Save project ======
 document.getElementById("saveProject").addEventListener("click", () => {
@@ -249,7 +275,6 @@ function drawAnnotationStrips() {
 
   const duration = state.edf.nRecords * state.edf.duration;
   state.project.annotations.forEach((ann, idx) => {
-    if (!ann.visible) return;
     const strip = document.createElement("div");
     strip.className = "annotation-strip";
 
@@ -283,6 +308,127 @@ function drawAnnotationStrips() {
     strips.appendChild(strip);
   });
 }
+
+function drawVideoPane() {
+  const pane = document.getElementById("videoPane");
+  if (!state.project || !Array.isArray(state.project.videos) || state.project.videos.length === 0) {
+    pane.style.display = "none";
+    pane.innerHTML = "";
+    return;
+  }
+
+  pane.style.display = "block";
+  pane.innerHTML = "";
+
+  // Videos associated with current moment
+  const now = state.currentTimeSec;
+  const vidsNow = state.project.videos.filter(v => now >= v.startSec && now <= v.endSec);
+
+  if (vidsNow.length === 0) {
+    const noDiv = document.createElement("div");
+    noDiv.className = "video-placeholder";
+    noDiv.textContent = "no associated videos";
+    pane.appendChild(noDiv);
+    return;
+  }
+
+  vidsNow.forEach(v => {
+    const sub = document.createElement("div");
+    sub.className = "video-subpane";
+
+    const title = document.createElement("div");
+    title.className = "video-title";
+    title.textContent = `${v.name} (${v.file})`;
+    sub.appendChild(title);
+
+    const fileKey = v.file;
+
+    const lv = state.loadedVideos[fileKey];
+
+    if (!lv || !lv.el) {
+      const placeholder = document.createElement("div");
+      placeholder.className = "video-placeholder";
+      placeholder.textContent = `${t("clickToLoad")} ${v.name} (${v.file})`;
+      placeholder.addEventListener("click", () => {
+        const inp = document.createElement("input");
+        inp.type = "file";
+        inp.accept = "video/*";
+        inp.onchange = async ev => {
+          const f = ev.target.files[0];
+          if (!f) return;
+          if (f.name !== fileKey) {
+            alert(`Please select ${fileKey}`);
+            return;
+          }
+          state.files[f.name] = f;
+          const url = URL.createObjectURL(f);
+          const video = document.createElement("video");
+          video.controls = true;
+          video.className = "video-controls";
+          video.src = url;
+          video.preload = "metadata";
+          state.loadedVideos[fileKey] = { url, el: video, startSec: v.startSec };
+          // Seek to current time offset when metadata loaded
+          video.addEventListener("loadedmetadata", () => {
+            const target = Math.max(0, state.currentTimeSec - v.startSec);
+            if (target < video.duration) video.currentTime = target;
+          });
+          drawVideoPane();
+        };
+        inp.click();
+      });
+      sub.appendChild(placeholder);
+    } else {
+      // have loaded video element
+      const video = lv.el;
+      // ensure it's not attached already in another container
+      if (!video.parentElement || video.parentElement !== sub) {
+        // clone element if needed to avoid moving between DOM (but we can attach)
+        // attach
+        video.style.width = "100%";
+        video.style.maxHeight = "300px";
+        sub.appendChild(video);
+      }
+      // adjust currentTime relative to video's start
+      const offset = Math.max(0, state.currentTimeSec - v.startSec);
+      if (!isNaN(video.duration)) {
+        if (Math.abs(video.currentTime - offset) > 0.35) {
+          try { video.currentTime = Math.min(offset, Math.max(0, video.duration)); } catch (e) { /* ignore seek errors */ }
+        }
+      }
+      if (state.play) {
+        if (video.paused) video.play().catch(()=>{});
+      } else {
+        if (!video.paused) video.pause();
+      }
+    }
+
+    pane.appendChild(sub);
+  });
+}
+
+// synchronize loaded videos each frame (called from tick)
+function syncVideos() {
+  const vids = state.project?.videos || [];
+  for (const v of vids) {
+    const key = v.file;
+    const lv = state.loadedVideos[key];
+    if (!lv || !lv.el) continue;
+    const video = lv.el;
+    const target = Math.max(0, state.currentTimeSec - v.startSec);
+    // skip if target out of video duration bounds
+    if (!isNaN(video.duration) && (target < 0 || target > video.duration)) continue;
+    if (Math.abs(video.currentTime - target) > 0.35 && !video.seeking) {
+      try { video.currentTime = target; } catch (e) {}
+    }
+    if (state.play) {
+      if (video.paused) video.play().catch(()=>{});
+    } else {
+      if (!video.paused) video.pause();
+    }
+  }
+}
+
 
 // Update slider position after drawing
 function updateTimelineSlider() {
@@ -426,6 +572,7 @@ function drawSignals() {
   // }
   drawAnnotationStrips();
   updateTimelineSlider();
+  drawVideoPane();
 }
 
 
@@ -440,6 +587,9 @@ function tick(ts) {
 
   if (state.play) requestAnimationFrame(tick);
   updateTimelineSlider();
+
+  // keep videos roughly synchronized
+  syncVideos();
 }
 
 // ====== Init ======

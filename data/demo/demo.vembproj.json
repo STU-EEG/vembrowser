@@ -61,5 +61,19 @@
       ],
       "visible": true
     }
+  ],
+  "videos": [
+    {
+      "name": "webcam",
+      "file": "webcam.mp4",
+      "startSec": 2,
+      "endSec": 4
+    },
+    {
+      "name": "webcamProcessed",
+      "file": "webcam_processed.mp4",
+      "startSec": 2,
+      "endSec": 4
+    }
   ]
 }
