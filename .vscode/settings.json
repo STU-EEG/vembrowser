@@ -1,8 +1,9 @@
 {
-    "jupyter.notebookFileRoot": "${workspaceFolder}/src",
+    "jupyter.notebookFileRoot": "${workspaceFolder}",
     "python.testing.pytestArgs": [
         "test"
     ],
     "python.testing.unittestEnabled": false,
-    "python.testing.pytestEnabled": true
+    "python.testing.pytestEnabled": true,
+    "python-envs.defaultEnvManager": "ms-python.python:system"
 }
