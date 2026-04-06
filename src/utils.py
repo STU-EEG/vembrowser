@@ -252,6 +252,7 @@ class VideoProcessor:
 
             if head_center == (0, 0):
                 logging.warning("head center is 0, skipping")
+                continue
             
             size_fraction = int(avg_shoulder * 0.3)
             if size_fraction < 10:  # Minimum size
