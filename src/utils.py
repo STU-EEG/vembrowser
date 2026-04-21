@@ -310,6 +310,6 @@ class VideoProcessor:
         
         for video_file in video_files:
             # Skip files that don't match the pattern
-            if "__" not in video_file.stem:
+            if not video_file.stem.endswith("s"):
                 continue
             self.process_video(video_file)
