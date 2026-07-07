@@ -2,3 +2,5 @@
 .DS_store
 real_data
 
+__pycache__
+
